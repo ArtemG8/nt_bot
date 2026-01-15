@@ -5,8 +5,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 
+from config.config import conf
+from handlers import private_user
+
 # Настройка логирования
 logger = logging.getLogger(__name__)
+
 
 async def main():
     logging.basicConfig(
@@ -17,23 +21,28 @@ async def main():
 
     logger.info("Starting bot...")
 
+    # Проверка наличия токена
+    if not conf.BOT_TOKEN:
+        logger.error("BOT_TOKEN not found in environment variables!")
+        return
+
     storage = MemoryStorage()
 
     # Инициализируем бота и диспетчера
-    # bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
+    bot = Bot(
+        token=conf.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode='HTML')
+    )
     dp = Dispatcher(storage=storage)
 
+    # Регистрируем роутеры
+    dp.include_router(private_user.router)
 
+    # Пропускаем накопившиеся апдейты и запускаем polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    logger.info("Bot started successfully!")
+    await dp.start_polling(bot)
 
-    # # Создаем таблицы в БД, если их нет
-    # logger.info("Creating database tables if not exist...")
-    # await create_db_and_tables()
-    # logger.info("Database tables checked/created.")
-    #
-    #
-    # # Пропускаем накопившиеся апдейты и запускаем polling
-    # await bot.delete_webhook(drop_pending_updates=True)
-    # await dp.start_polling(bot)
 
 if __name__ == '__main__':
     try:
