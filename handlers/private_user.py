@@ -2,10 +2,9 @@
 Обработчики для приватных сообщений пользователей
 """
 import logging
-from pathlib import Path
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types import Message, CallbackQuery
 
 from lexicon.lexicon_ru import (
     WELCOME_MESSAGE, MAIN_MENU_TEXT, ABOUT_TEXT,
@@ -19,7 +18,7 @@ from lexicon.lexicon_ru import (
 from keyboards.keyboard_utils import (
     get_main_menu_keyboard, get_tariffs_keyboard, get_back_keyboard
 )
-from config.config import conf, BASE_DIR
+from config.config import conf
 from utils.video_uploader import ensure_video_file_id, save_file_id_to_env
 
 logger = logging.getLogger(__name__)
