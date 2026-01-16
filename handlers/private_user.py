@@ -9,7 +9,11 @@ from aiogram.types import Message, CallbackQuery
 from lexicon.lexicon_ru import (
     WELCOME_MESSAGE, MAIN_MENU_TEXT, ABOUT_TEXT,
     TARIFFS_TEXT, SUPPORT_TEXT_TEMPLATE, AFTER_PAYMENT_TEXT_TEMPLATE,
-    BUTTON_ABOUT, BUTTON_SUBSCRIBE, BUTTON_SUPPORT, BUTTON_BACK
+    BUTTON_ABOUT, BUTTON_SUBSCRIBE, BUTTON_SUPPORT, BUTTON_BACK,
+    TARIFF_VIEWS_TEXT_TEMPLATE, TARIFF_REACTIONS_TEXT_TEMPLATE,
+    TARIFF_BOTH_TEXT_TEMPLATE, RECEIPT_RECEIVED_TEXT_TEMPLATE,
+    NEW_RECEIPT_NOTIFICATION, USER_INFO_TEMPLATE, NO_USERNAME,
+    ERROR_RECEIPT_FORWARD
 )
 from keyboards.keyboard_utils import (
     get_main_menu_keyboard, get_tariffs_keyboard, get_back_keyboard
@@ -77,21 +81,16 @@ async def process_tariff_views(callback: CallbackQuery):
     """Обработчик выбора тарифа 'Охваты'"""
     await callback.answer()
     await callback.message.answer(
-        text=f"💳 Тариф: Охваты\n\n"
-             f"Для оформления подписки свяжитесь с менеджером: \n\n"
-             "После оплаты перешлите чек менеджеру @{conf.MANAGER_USERNAME}",
+        text=TARIFF_VIEWS_TEXT_TEMPLATE.format(manager_username=conf.MANAGER_USERNAME),
         reply_markup=get_back_keyboard()
     )
-#Для оформления подписки отправьте сумму (x) по реквизитам 123-456-789 MoneyBank
 
 @router.callback_query(F.data == "tariff_reactions")
 async def process_tariff_reactions(callback: CallbackQuery):
     """Обработчик выбора тарифа 'Реакции'"""
     await callback.answer()
     await callback.message.answer(
-        text=f"💳 Тариф: Реакции\n\n"
-             f"Для оформления подписки свяжитесь с менеджером: @{conf.MANAGER_USERNAME}\n\n"
-             "После оплаты перешлите чек менеджеру.",
+        text=TARIFF_REACTIONS_TEXT_TEMPLATE.format(manager_username=conf.MANAGER_USERNAME),
         reply_markup=get_back_keyboard()
     )
 
@@ -101,9 +100,7 @@ async def process_tariff_both(callback: CallbackQuery):
     """Обработчик выбора тарифа 'Охваты + Реакции'"""
     await callback.answer()
     await callback.message.answer(
-        text=f"💳 Тариф: Охваты + Реакции (скидка 30%)\n\n"
-             f"Для оформления подписки свяжитесь с менеджером: @{conf.MANAGER_USERNAME}\n\n"
-             "После оплаты перешлите чек менеджеру.",
+        text=TARIFF_BOTH_TEXT_TEMPLATE.format(manager_username=conf.MANAGER_USERNAME),
         reply_markup=get_back_keyboard()
     )
 
@@ -134,8 +131,7 @@ async def handle_receipt(message: Message):
     
     # Отправляем подтверждение пользователю
     await message.answer(
-        text=f"✅ Чек получен! Мы переслали его менеджеру @{manager_username}.\n\n"
-             "Ожидайте обработки заказа.",
+        text=RECEIPT_RECEIVED_TEXT_TEMPLATE.format(manager_username=manager_username),
         reply_markup=get_back_keyboard()
     )
     
@@ -143,10 +139,14 @@ async def handle_receipt(message: Message):
     if conf.MANAGER_CHAT_ID:
         try:
             bot = message.bot
-            user_info = f"Пользователь: @{message.from_user.username or 'без username'}\nID: {message.from_user.id}\nИмя: {message.from_user.full_name}"
+            user_info = USER_INFO_TEMPLATE.format(
+                username=message.from_user.username or NO_USERNAME,
+                user_id=message.from_user.id,
+                full_name=message.from_user.full_name
+            )
             await bot.send_message(
                 chat_id=conf.MANAGER_CHAT_ID,
-                text=f"📋 Новый чек об оплате\n\n{user_info}"
+                text=f"{NEW_RECEIPT_NOTIFICATION}\n\n{user_info}"
             )
             await bot.forward_message(
                 chat_id=conf.MANAGER_CHAT_ID,
@@ -155,4 +155,4 @@ async def handle_receipt(message: Message):
             )
         except Exception as e:
             # Если не удалось переслать, просто логируем ошибку
-            logger.error(f"Ошибка при пересылке чека менеджеру: {e}")
+            logger.error(ERROR_RECEIPT_FORWARD.format(error=e))
