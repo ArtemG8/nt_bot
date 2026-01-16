@@ -7,6 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from config.config import conf
 from handlers import private_user
+from utils.video_uploader import ensure_video_file_id
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -40,6 +41,21 @@ async def main():
 
     # Пропускаем накопившиеся апдейты и запускаем polling
     await bot.delete_webhook(drop_pending_updates=True)
+    
+    # Проверяем последнее видео в MANAGER_CHAT_ID
+    if conf.MANAGER_CHAT_ID:
+        logger.info("Проверяю последнее видео в MANAGER_CHAT_ID...")
+        try:
+            file_id = await ensure_video_file_id(bot)
+            if file_id:
+                logger.info(f"✅ Найдено видео, file_id: {file_id}")
+            else:
+                logger.warning("⚠️ Видео не найдено. Отправьте видео в чат/канал с MANAGER_CHAT_ID")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при проверке видео: {e}", exc_info=True)
+    else:
+        logger.warning("MANAGER_CHAT_ID не указан. Укажите его в .env для автоматического поиска видео")
+    
     logger.info("Bot started successfully!")
     await dp.start_polling(bot)
 

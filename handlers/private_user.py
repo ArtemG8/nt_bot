@@ -2,9 +2,10 @@
 Обработчики для приватных сообщений пользователей
 """
 import logging
+from pathlib import Path
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, FSInputFile
 
 from lexicon.lexicon_ru import (
     WELCOME_MESSAGE, MAIN_MENU_TEXT, ABOUT_TEXT,
@@ -18,7 +19,8 @@ from lexicon.lexicon_ru import (
 from keyboards.keyboard_utils import (
     get_main_menu_keyboard, get_tariffs_keyboard, get_back_keyboard
 )
-from config.config import conf
+from config.config import conf, BASE_DIR
+from utils.video_uploader import ensure_video_file_id, save_file_id_to_env
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -26,14 +28,9 @@ router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    """Обработчик команды /start - приветственное сообщение без кнопок"""
+    """Обработчик команды /start - приветственное сообщение с главным меню"""
     await message.answer(
         text=WELCOME_MESSAGE,
-        reply_markup=None
-    )
-    # Отправляем главное меню через небольшую задержку
-    await message.answer(
-        text=MAIN_MENU_TEXT,
         reply_markup=get_main_menu_keyboard()
     )
 
@@ -41,12 +38,43 @@ async def cmd_start(message: Message):
 @router.message(F.text == BUTTON_ABOUT)
 async def show_about(message: Message):
     """Обработчик кнопки 'Подробнее'"""
-    await message.answer(
-        text=ABOUT_TEXT,
-        reply_markup=get_back_keyboard()
-    )
-    # Здесь можно добавить отправку видеоролика, если он есть
-    # await message.answer_video(video="FILE_ID_VIDEO")
+    # Получаем file_id последнего видео из MANAGER_CHAT_ID
+    file_id = await ensure_video_file_id(message.bot)
+    
+    if file_id:
+        try:
+            # Используем file_id для мгновенной отправки
+            # Пробуем отправить как видео, если не получится - как документ
+            try:
+                await message.answer_video(
+                    video=file_id,
+                    caption=ABOUT_TEXT,
+                    supports_streaming=True,
+                    reply_markup=get_back_keyboard()
+                )
+                logger.info("Видео успешно отправлено по file_id")
+            except Exception as video_error:
+                logger.debug(f"Не удалось отправить как видео, пробую как документ: {video_error}")
+                # Если не получилось как видео, пробуем как документ
+                await message.answer_document(
+                    document=file_id,
+                    caption=ABOUT_TEXT,
+                    reply_markup=get_back_keyboard()
+                )
+                logger.info("Видео отправлено как документ по file_id")
+        except Exception as e:
+            logger.error(f"Ошибка при отправке видео по file_id: {e}", exc_info=True)
+            await message.answer(
+                text=ABOUT_TEXT,
+                reply_markup=get_back_keyboard()
+            )
+    else:
+        # Если видео не найдено, отправляем только текст
+        logger.info("Видео не найдено в MANAGER_CHAT_ID")
+        await message.answer(
+            text=ABOUT_TEXT,
+            reply_markup=get_back_keyboard()
+        )
 
 
 @router.message(F.text == BUTTON_SUBSCRIBE)
@@ -71,7 +99,7 @@ async def show_support(message: Message):
 async def back_to_menu(message: Message):
     """Обработчик кнопки 'Назад' - возврат в главное меню"""
     await message.answer(
-        text=MAIN_MENU_TEXT,
+        text=WELCOME_MESSAGE,
         reply_markup=get_main_menu_keyboard()
     )
 
@@ -109,8 +137,11 @@ async def process_tariff_both(callback: CallbackQuery):
 async def back_to_menu_callback(callback: CallbackQuery):
     """Обработчик кнопки 'Назад' в inline клавиатуре"""
     await callback.answer()
+    await callback.message.edit_reply_markup(
+        reply_markup=None
+    )
     await callback.message.answer(
-        text=MAIN_MENU_TEXT,
+        text=WELCOME_MESSAGE,
         reply_markup=get_main_menu_keyboard()
     )
 
@@ -124,9 +155,45 @@ async def process_payment(message: Message):
     )
 
 
+async def process_video_message(message: Message):
+    """Обрабатывает сообщение с видео и обновляет file_id"""
+    # Проверяем, что сообщение пришло из MANAGER_CHAT_ID
+    if str(message.chat.id) == str(conf.MANAGER_CHAT_ID):
+        file_id = None
+        
+        if message.video:
+            file_id = message.video.file_id
+            logger.info(f"Получено новое видео в MANAGER_CHAT_ID (как видео): {file_id}")
+        elif message.document:
+            file_id = message.document.file_id
+            logger.info(f"Получено новое видео в MANAGER_CHAT_ID (как документ): {file_id}")
+        
+        if file_id:
+            # Сохраняем новый file_id
+            await save_file_id_to_env(file_id)
+            # Обновляем в конфиге
+            import os
+            from dotenv import load_dotenv
+            load_dotenv(override=True)
+            conf.ABOUT_VIDEO_FILE_ID = os.getenv("ABOUT_VIDEO_FILE_ID", file_id)
+            logger.info(f"✅ file_id обновлен: {file_id}")
+
+
+@router.message(F.video | (F.document & F.document.mime_type.startswith("video/")))
+async def handle_video_in_manager_chat(message: Message):
+    """Обработчик получения видео в MANAGER_CHAT_ID - автоматически обновляет file_id
+    Работает для обычных чатов и каналов (если бот является администратором)
+    """
+    await process_video_message(message)
+
+
 @router.message(F.photo | F.document)
 async def handle_receipt(message: Message):
     """Обработчик получения фото/документа (чек) для пересылки менеджеру"""
+    # Пропускаем видео - они обрабатываются отдельным обработчиком
+    if message.document and message.document.mime_type and message.document.mime_type.startswith("video/"):
+        return
+    
     manager_username = conf.MANAGER_USERNAME
     
     # Отправляем подтверждение пользователю
