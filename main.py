@@ -8,7 +8,7 @@ from aiogram.client.default import DefaultBotProperties
 from config.config import conf
 from handlers import private_user
 from utils.video_uploader import ensure_video_file_id
-
+from keyboards.set_menu import set_main_menu
 # Настройка логирования
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ async def main():
         default=DefaultBotProperties(parse_mode='HTML')
     )
     dp = Dispatcher(storage=storage)
-
+    await set_main_menu(bot)
     # Регистрируем роутеры
     dp.include_router(private_user.router)
 
