@@ -177,6 +177,16 @@ async def process_video_message(message: Message):
             load_dotenv(override=True)
             conf.ABOUT_VIDEO_FILE_ID = os.getenv("ABOUT_VIDEO_FILE_ID", file_id)
             logger.info(f"✅ file_id обновлен: {file_id}")
+            
+            # Отправляем уведомление в MANAGER_CHAT_ID
+            try:
+                await message.bot.send_message(
+                    chat_id=conf.MANAGER_CHAT_ID,
+                    text="✅ Видео загружено и изменено"
+                )
+                logger.info("Уведомление отправлено в MANAGER_CHAT_ID")
+            except Exception as e:
+                logger.error(f"Ошибка при отправке уведомления: {e}", exc_info=True)
 
 
 @router.message(F.video | (F.document & F.document.mime_type.startswith("video/")))
