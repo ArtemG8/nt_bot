@@ -1,6 +1,3 @@
-"""
-Обработчики для приватных сообщений пользователей
-"""
 import logging
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
@@ -27,7 +24,7 @@ router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    """Обработчик команды /start - приветственное сообщение с главным меню"""
+    """/start -"""
     await message.answer(
         text=WELCOME_MESSAGE,
         reply_markup=get_main_menu_keyboard()
@@ -37,13 +34,12 @@ async def cmd_start(message: Message):
 @router.message(F.text == BUTTON_ABOUT)
 async def show_about(message: Message):
     """Обработчик кнопки 'Подробнее'"""
-    # Получаем file_id последнего видео из MANAGER_CHAT_ID
+    # get file_id последнего видео из MANAGER_CHAT_ID
     file_id = await ensure_video_file_id(message.bot)
-    
+
     if file_id:
         try:
-            # Используем file_id для мгновенной отправки
-            # Пробуем отправить как видео, если не получится - как документ
+            # отправка по file_id
             try:
                 await message.answer_video(
                     video=file_id,
@@ -54,7 +50,7 @@ async def show_about(message: Message):
                 logger.info("Видео успешно отправлено по file_id")
             except Exception as video_error:
                 logger.debug(f"Не удалось отправить как видео, пробую как документ: {video_error}")
-                # Если не получилось как видео, пробуем как документ
+                # Если не получилось как видео, попытка как документ
                 await message.answer_document(
                     document=file_id,
                     caption=ABOUT_TEXT,
@@ -68,7 +64,7 @@ async def show_about(message: Message):
                 reply_markup=get_back_keyboard()
             )
     else:
-        # Если видео не найдено, отправляем только текст
+        # Если видео не найдено, отправка только текста
         logger.info("Видео не найдено в MANAGER_CHAT_ID")
         await message.answer(
             text=ABOUT_TEXT,
@@ -112,6 +108,7 @@ async def process_tariff_views(callback: CallbackQuery):
         reply_markup=get_back_keyboard()
     )
 
+
 @router.callback_query(F.data == "tariff_reactions")
 async def process_tariff_reactions(callback: CallbackQuery):
     """Обработчик выбора тарифа 'Реакции'"""
@@ -134,7 +131,7 @@ async def process_tariff_both(callback: CallbackQuery):
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu_callback(callback: CallbackQuery):
-    """Обработчик кнопки 'Назад' в inline клавиатуре"""
+    """Обработчик кнопки inline 'Назад' """
     await callback.answer()
     await callback.message.edit_reply_markup(
         reply_markup=None
@@ -147,7 +144,7 @@ async def back_to_menu_callback(callback: CallbackQuery):
 
 @router.message(F.successful_payment)
 async def process_payment(message: Message):
-    """Обработчик успешной оплаты через Telegram Payments"""
+    """Обработчик  оплаты """
     await message.answer(
         text=AFTER_PAYMENT_TEXT_TEMPLATE.format(manager_username=conf.MANAGER_USERNAME),
         reply_markup=get_back_keyboard()
@@ -155,29 +152,27 @@ async def process_payment(message: Message):
 
 
 async def process_video_message(message: Message):
-    """Обрабатывает сообщение с видео и обновляет file_id"""
-    # Проверяем, что сообщение пришло из MANAGER_CHAT_ID
+    """Обработка сообщение с видео и обновление file_id"""
     if str(message.chat.id) == str(conf.MANAGER_CHAT_ID):
         file_id = None
-        
+
         if message.video:
             file_id = message.video.file_id
             logger.info(f"Получено новое видео в MANAGER_CHAT_ID (как видео): {file_id}")
         elif message.document:
             file_id = message.document.file_id
             logger.info(f"Получено новое видео в MANAGER_CHAT_ID (как документ): {file_id}")
-        
+
         if file_id:
-            # Сохраняем новый file_id
+            # Сохраняем новый file_id и обновляет конфиг
             await save_file_id_to_env(file_id)
-            # Обновляем в конфиге
             import os
             from dotenv import load_dotenv
             load_dotenv(override=True)
             conf.ABOUT_VIDEO_FILE_ID = os.getenv("ABOUT_VIDEO_FILE_ID", file_id)
             logger.info(f"✅ file_id обновлен: {file_id}")
-            
-            # Отправляем уведомление в MANAGER_CHAT_ID
+
+            # Отправка уведомления в MANAGER_CHAT_ID
             try:
                 await message.bot.send_message(
                     chat_id=conf.MANAGER_CHAT_ID,
@@ -191,27 +186,24 @@ async def process_video_message(message: Message):
 @router.message(F.video | (F.document & F.document.mime_type.startswith("video/")))
 async def handle_video_in_manager_chat(message: Message):
     """Обработчик получения видео в MANAGER_CHAT_ID - автоматически обновляет file_id
-    Работает для обычных чатов и каналов (если бот является администратором)
+    Работает для чатов и каналов если бот админин
     """
     await process_video_message(message)
 
 
 @router.message(F.photo | F.document)
 async def handle_receipt(message: Message):
-    """Обработчик получения фото/документа (чек) для пересылки менеджеру"""
-    # Пропускаем видео - они обрабатываются отдельным обработчиком
+    """Обработчик получения чека для пересылки менеджеру"""
     if message.document and message.document.mime_type and message.document.mime_type.startswith("video/"):
         return
-    
+
     manager_username = conf.MANAGER_USERNAME
-    
-    # Отправляем подтверждение пользователю
+
     await message.answer(
         text=RECEIPT_RECEIVED_TEXT_TEMPLATE.format(manager_username=manager_username),
         reply_markup=get_back_keyboard()
     )
-    
-    # Пересылаем чек менеджеру, если указан chat_id
+
     if conf.MANAGER_CHAT_ID:
         try:
             bot = message.bot
@@ -230,5 +222,4 @@ async def handle_receipt(message: Message):
                 message_id=message.message_id
             )
         except Exception as e:
-            # Если не удалось переслать, просто логируем ошибку
             logger.error(ERROR_RECEIPT_FORWARD.format(error=e))

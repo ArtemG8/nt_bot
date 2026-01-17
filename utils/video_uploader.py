@@ -1,5 +1,5 @@
 """
-Утилита для получения file_id последнего видео из MANAGER_CHAT_ID
+получение file_id последнего видео из MANAGER_CHAT_ID
 """
 import logging
 from aiogram import Bot
@@ -11,15 +11,9 @@ logger = logging.getLogger(__name__)
 
 async def ensure_video_file_id(bot: Bot = None) -> str | None:
     """
-    Получает file_id последнего видео из MANAGER_CHAT_ID.
-    Если file_id уже есть в конфиге, возвращает его.
-    Новые видео автоматически обновляются через обработчик сообщений.
-    
-    Args:
-        bot: Экземпляр бота (опционально)
-    
-    Returns:
-        file_id видео или None
+    Получает file_id последнего видео из MANAGER_CHAT_ID
+    Если file_id уже есть в конфиге, возвращает его
+    Новые видео автоматически обновляются через обработчик сообщений
     """
     # Если file_id уже есть, используем его
     if conf.ABOUT_VIDEO_FILE_ID:
@@ -27,8 +21,6 @@ async def ensure_video_file_id(bot: Bot = None) -> str | None:
         return conf.ABOUT_VIDEO_FILE_ID
     
     # Если file_id нет, пытаемся найти последнее видео
-    # Но это может не сработать для старых сообщений
-    # Лучше просто попросить пользователя отправить новое видео
     logger.info("file_id не найден. Ожидаю новое видео в MANAGER_CHAT_ID...")
     logger.info("💡 Отправьте видео в чат/канал с MANAGER_CHAT_ID, и оно автоматически будет использовано")
     
@@ -37,7 +29,7 @@ async def ensure_video_file_id(bot: Bot = None) -> str | None:
 
 async def save_file_id_to_env(file_id: str):
     """
-    Сохраняет file_id в .env файл
+    Сохраняет file_id в .env
     """
     env_file = BASE_DIR / ".env"
     
@@ -46,8 +38,7 @@ async def save_file_id_to_env(file_id: str):
         env_content = ""
         if env_file.exists():
             env_content = env_file.read_text(encoding='utf-8')
-        
-        # Проверяем, есть ли уже ABOUT_VIDEO_FILE_ID
+
         lines = env_content.split('\n')
         updated = False
         
@@ -56,15 +47,13 @@ async def save_file_id_to_env(file_id: str):
                 lines[i] = f'ABOUT_VIDEO_FILE_ID={file_id}'
                 updated = True
                 break
-        
-        # Если не нашли, добавляем новую строку
+
         if not updated:
             if env_content and not env_content.endswith('\n'):
                 env_content += '\n'
             env_content += f'ABOUT_VIDEO_FILE_ID={file_id}\n'
             lines = env_content.split('\n')
-        
-        # Записываем обратно
+
         env_file.write_text('\n'.join(lines), encoding='utf-8')
         logger.info(f"file_id сохранен в .env файл: {file_id}")
         
